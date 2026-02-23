@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,41 +9,31 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <style>
-:root {
-  --bg: #0a0e17;
-  --surface: #111827;
-  --surface2: #1a2236;
-  --border: #1e293b;
-  --text: #e2e8f0;
-  --text-dim: #64748b;
-  --accent: #22d3ee;
-  --accent2: #a78bfa;
-  --green: #34d399;
-  --red: #f87171;
-  --orange: #fbbf24;
-  --pink: #f472b6;
-  --blue: #60a5fa;
-  --radius: 16px;
-  --shadow: 0 4px 24px rgba(0,0,0,0.3);
+:root, [data-theme="dark"] {
+  --bg:#0a0e17;--surface:#111827;--surface2:#1a2236;--border:#1e293b;--text:#e2e8f0;--text-dim:#64748b;
+  --accent:#22d3ee;--accent2:#a78bfa;--green:#34d399;--red:#f87171;--orange:#fbbf24;--pink:#f472b6;--blue:#60a5fa;
+  --radius:16px;--shadow:0 4px 24px rgba(0,0,0,0.3);--noise-op:0.03;--glow-op:0.07;--modal-bg:rgba(0,0,0,0.6);
+}
+[data-theme="light"] {
+  --bg:#f1f5f9;--surface:#ffffff;--surface2:#f1f5f9;--border:#e2e8f0;--text:#1e293b;--text-dim:#64748b;
+  --accent:#0891b2;--accent2:#7c3aed;--green:#059669;--red:#dc2626;--orange:#d97706;--pink:#db2777;--blue:#2563eb;
+  --shadow:0 4px 24px rgba(0,0,0,0.06);--noise-op:0;--glow-op:0;--modal-bg:rgba(0,0,0,0.25);
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
-  font-family:'DM Sans',sans-serif;
-  background:var(--bg);
-  color:var(--text);
-  min-height:100vh;
-  overflow-x:hidden;
+  font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;transition:background .3s,color .3s;
 }
 .noise {
   position:fixed; top:0; left:0; width:100%; height:100%;
   background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
-  pointer-events:none; z-index:0;
+  pointer-events:none; z-index:0; opacity:var(--noise-op); transition:opacity .3s;
 }
-.glow-orb { position:fixed; width:600px; height:600px; border-radius:50%; filter:blur(120px); opacity:0.07; pointer-events:none; z-index:0; }
+.glow-orb { position:fixed; width:600px; height:600px; border-radius:50%; filter:blur(120px); opacity:var(--glow-op); pointer-events:none; z-index:0; transition:opacity .3s; }
 .glow-orb.cyan { background:var(--accent); top:-200px; right:-100px; }
 .glow-orb.purple { background:var(--accent2); bottom:-200px; left:-100px; }
 
 .app { position:relative; z-index:1; max-width:1400px; margin:0 auto; padding:24px; }
+@media(max-width:600px) { .app{padding:12px;} }
 
 /* Sync indicator */
 .sync-badge {
@@ -213,10 +203,23 @@ h1 span { font-weight:400; font-size:16px; -webkit-text-fill-color:var(--text-di
 .export-bar { display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-bottom:20px; flex-wrap:wrap; }
 
 .subtotal-badge {
-  font-family:'Space Mono',monospace; font-size:14px; font-weight:700;
-  padding:4px 14px; border-radius:20px; background:rgba(34,211,238,0.1);
-  color:var(--accent); border:1px solid rgba(34,211,238,0.15);
+  font-family:'Space Mono',monospace; font-size:13px; font-weight:700;
+  padding:3px 12px; border-radius:20px; background:rgba(34,211,238,0.1);
+  color:var(--accent); border:1px solid rgba(34,211,238,0.15); white-space:nowrap;
 }
+.table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.data-table { min-width:380px; }
+.history-filters { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+.filter-chip {
+  padding:4px 12px; border:1px solid var(--border); border-radius:20px;
+  background:transparent; color:var(--text-dim); font-family:'DM Sans',sans-serif;
+  font-size:11px; cursor:pointer; transition:all 0.2s;
+}
+.filter-chip:hover { border-color:var(--accent); color:var(--accent); }
+.filter-chip.active { background:rgba(34,211,238,0.12); color:var(--accent); border-color:var(--accent); }
+.modal-overlay { background:var(--modal-bg); }
+[data-theme="dark"] .btn-primary { color:#0a0e17; }
+@media(max-width:480px) { .summary-value{font-size:18px;} .summary-row{gap:8px;} }
 
 @keyframes fadeIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
 .animate-in { animation:fadeIn 0.4s ease forwards; opacity:0; }
@@ -246,6 +249,7 @@ h1 span { font-weight:400; font-size:16px; -webkit-text-fill-color:var(--text-di
     <div class="header-actions">
       <div class="month-tabs" id="monthTabs"></div>
       <button class="btn-icon" onclick="openMonthModal()" title="Agregar mes">+</button>
+      <button class="btn-icon" onclick="toggleTheme()" id="themeBtn" title="Cambiar tema">🌙</button>
     </div>
   </header>
   <div id="mainContent">
@@ -272,6 +276,20 @@ firebase.initializeApp({
 const db = firebase.database();
 const dataRef = db.ref('gastos2026');
 
+// ========== THEME ==========
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('themeBtn').textContent = isDark ? '☀️' : '🌙';
+  renderCharts();
+  if(historyChartInstance) renderHistoryChart();
+}
+function getThemeColors() {
+  const s = getComputedStyle(document.documentElement);
+  return { tx:s.getPropertyValue('--text-dim').trim(), bd:s.getPropertyValue('--border').trim(), ac:s.getPropertyValue('--accent').trim() };
+}
+
 // ========== STATE ==========
 const MONTH_ORDER = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
 const MONTH_SHORT = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
@@ -280,9 +298,11 @@ let state = { months: {}, currentMonth: null };
 let isLoaded = false;
 let saveTimeout = null;
 let isEditing = false;
+let historyChartInstance = null;
+let selectedHistoryItems = [];
 
 function emptyMonth() {
-  return { ingresos:{sueldo:0,resto:0,extra:0}, debitos:[], tarjetas:[], servicios:[], extras:[] };
+  return { ingresos:{sueldo:0,resto:0,extra:0}, debitos:[], tarjetas:[], servicios:[], fijos:[], extras:[] };
 }
 
 // ========== FIREBASE SYNC ==========
@@ -309,17 +329,19 @@ dataRef.on('value', (snapshot) => {
     // Ensure arrays exist (Firebase removes empty arrays)
     Object.keys(state.months).forEach(m => {
       const d = state.months[m];
-      if(!d.debitos) d.debitos = [];
-      if(!d.tarjetas) d.tarjetas = [];
-      if(!d.servicios) d.servicios = [];
-      if(!d.extras) d.extras = [];
+      if(!d.debitos)d.debitos=[]; if(!d.tarjetas)d.tarjetas=[]; if(!d.servicios)d.servicios=[]; if(!d.fijos)d.fijos=[]; if(!d.extras)d.extras=[];
       if(!d.ingresos) d.ingresos = {sueldo:0,resto:0,extra:0};
     });
   }
   if(!isLoaded) {
     isLoaded = true;
     const keys = sortedMonthKeys();
-    if(keys.length && !state.currentMonth) state.currentMonth = keys[0];
+    const now = MONTH_ORDER[new Date().getMonth()];
+    if(keys.includes(now)) {
+      state.currentMonth = now;
+    } else if(keys.length) {
+      state.currentMonth = keys[keys.length - 1];
+    }
   }
   if(!isEditing) {
     renderTabs();
@@ -358,9 +380,10 @@ function getMonthTotals(mKey) {
   const totalDebitos = (d.debitos||[]).reduce((s,i)=>s+i.importe,0);
   const totalTarjetas = (d.tarjetas||[]).reduce((s,i)=>s+i.importe,0);
   const totalServicios = (d.servicios||[]).reduce((s,i)=>s+i.importe,0);
+  const totalFijos = (d.fijos||[]).reduce((s,i)=>s+i.importe,0);
   const totalExtras = (d.extras||[]).reduce((s,i)=>s+i.importe,0);
-  const totalGastos = totalDebitos+totalTarjetas+totalServicios+totalExtras;
-  return { totalIngresos, totalDebitos, totalTarjetas, totalServicios, totalExtras, totalGastos, balance:totalIngresos-totalGastos };
+  const totalGastos = totalDebitos+totalTarjetas+totalServicios+totalFijos+totalExtras;
+  return { totalIngresos, totalDebitos, totalTarjetas, totalServicios, totalFijos, totalExtras, totalGastos, balance:totalIngresos-totalGastos };
 }
 
 function sortedMonthKeys() {
@@ -418,6 +441,13 @@ function renderMain() {
         <div class="chart-container-sm"><canvas id="expenseDonut"></canvas></div>
       </div>
 
+      ${keys.length > 1 ? `
+      <div class="card full-width animate-in delay-2">
+        <div class="card-header"><div class="card-title"><span class="dot" style="background:var(--pink)"></span>Histórico por Item</div></div>
+        <div class="history-filters" id="historyFilters"></div>
+        <div class="chart-container"><canvas id="historyChart"></canvas></div>
+      </div>` : ''}
+
       <div class="card full-width animate-in delay-2">
         <div class="card-header">
           <div class="card-title"><span class="dot" style="background:var(--green)"></span>Ingresos — ${state.currentMonth}</div>
@@ -447,42 +477,45 @@ function renderMain() {
 
       <div class="card animate-in delay-3">
         <div class="card-header"><div class="card-title"><span class="dot" style="background:var(--orange)"></span>Débitos Automáticos</div><span class="subtotal-badge" id="badgeDebitos"></span></div>
-        <div id="debitosTable"></div>
+        <div class="table-wrap"><div id="debitosTable"></div></div>
         <button class="add-row-btn" onclick="openItemModal('debitos')">+ Agregar débito</button>
       </div>
 
       <div class="card animate-in delay-3">
         <div class="card-header"><div class="card-title"><span class="dot" style="background:var(--pink)"></span>Tarjetas</div><span class="subtotal-badge" id="badgeTarjetas"></span></div>
-        <div id="tarjetasTable"></div>
+        <div class="table-wrap"><div id="tarjetasTable"></div></div>
         <button class="add-row-btn" onclick="openItemModal('tarjetas')">+ Agregar tarjeta</button>
       </div>
 
       <div class="card animate-in delay-3">
         <div class="card-header"><div class="card-title"><span class="dot" style="background:var(--blue)"></span>Servicios</div><span class="subtotal-badge" id="badgeServicios"></span></div>
-        <div id="serviciosTable"></div>
+        <div class="table-wrap"><div id="serviciosTable"></div></div>
         <button class="add-row-btn" onclick="openItemModal('servicios')">+ Agregar servicio</button>
       </div>
 
       <div class="card animate-in delay-3">
+        <div class="card-header"><div class="card-title"><span class="dot" style="background:var(--green)"></span>Gastos Fijos</div><span class="subtotal-badge" id="badgeFijos"></span></div>
+        <div class="table-wrap"><div id="fijosTable"></div></div>
+        <button class="add-row-btn" onclick="openItemModal('fijos')">+ Agregar gasto fijo</button>
+      </div>
+
+      <div class="card animate-in delay-3">
         <div class="card-header"><div class="card-title"><span class="dot" style="background:var(--accent2)"></span>Gastos Extras</div><span class="subtotal-badge" id="badgeExtras"></span></div>
-        <div id="extrasTable"></div>
+        <div class="table-wrap"><div id="extrasTable"></div></div>
         <button class="add-row-btn" onclick="openItemModal('extras')">+ Agregar gasto</button>
       </div>
 
       <div class="card full-width animate-in delay-4">
         <div class="card-header"><div class="card-title"><span class="dot" style="background:var(--accent)"></span>Resumen — ${state.currentMonth}</div></div>
-        <div id="subtotalsPanel"></div>
+        <div class="table-wrap"><div id="subtotalsPanel"></div></div>
       </div>
     </div>
     <div class="export-bar">
       <button class="btn btn-danger btn-sm" onclick="deleteMonth()">Eliminar ${state.currentMonth}</button>
     </div>`;
 
-  renderSummary();
-  renderTables();
-  renderBadges();
-  renderSubtotals();
-  renderCharts();
+  renderSummary(); renderTables(); renderBadges(); renderSubtotals(); renderCharts();
+  if(keys.length > 1) buildHistoryFilters();
 }
 
 function renderBadges() {
@@ -494,6 +527,7 @@ function renderBadges() {
   setBadge('badgeDebitos', t.totalDebitos);
   setBadge('badgeTarjetas', t.totalTarjetas);
   setBadge('badgeServicios', t.totalServicios);
+  setBadge('badgeFijos', t.totalFijos);
   setBadge('badgeExtras', t.totalExtras);
 }
 
@@ -521,9 +555,10 @@ function renderSubtotals() {
   const debitos = calc(d.debitos);
   const tarjetas = calc(d.tarjetas);
   const servicios = calc(d.servicios);
+  const fijos = { total: t.totalFijos, paidTotal: t.totalFijos, pendingTotal: 0, paidCount: (d.fijos||[]).length, pendingCount: 0, count: (d.fijos||[]).length };
   const extras = { total: t.totalExtras, paidTotal: t.totalExtras, pendingTotal: 0, paidCount: (d.extras||[]).length, pendingCount: 0, count: (d.extras||[]).length };
 
-  const totalPagado = debitos.paidTotal + tarjetas.paidTotal + servicios.paidTotal + extras.paidTotal;
+  const totalPagado = debitos.paidTotal + tarjetas.paidTotal + servicios.paidTotal + fijos.paidTotal + extras.paidTotal;
   const totalPendiente = debitos.pendingTotal + tarjetas.pendingTotal + servicios.pendingTotal;
   const disponibleReal = t.totalIngresos - totalPagado;
 
@@ -600,6 +635,14 @@ function renderSubtotals() {
           <td class="amount" style="color:var(--green)">${fmt(servicios.paidTotal)}</td>
           <td class="amount" style="color:${servicios.pendingTotal>0?'var(--orange)':'var(--text-dim)'}">${servicios.pendingTotal>0?fmt(servicios.pendingTotal):'—'}</td>
           <td>${statusTag(servicios)}</td>
+        </tr>
+        <tr>
+          <td style="color:var(--green)">Gastos Fijos</td>
+          <td>${fijos.count} items</td>
+          <td class="amount">${fmt(fijos.total)}</td>
+          <td class="amount" style="color:var(--green)">${fmt(fijos.paidTotal)}</td>
+          <td class="amount">—</td>
+          <td><span class="status paid">OK</span></td>
         </tr>
         <tr>
           <td style="color:var(--accent2)">Gastos Extras</td>
@@ -704,6 +747,7 @@ function renderTables() {
   renderTable('debitosTable', d.debitos||[], [{key:'desc',label:'Descripción'},{key:'cuota',label:'Cuota'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]);
   renderTable('tarjetasTable', d.tarjetas||[], [{key:'desc',label:'Tarjeta'},{key:'cuota',label:'Cuotas'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]);
   renderTable('serviciosTable', d.servicios||[], [{key:'desc',label:'Servicio'},{key:'periodo',label:'Período'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]);
+  renderTable('fijosTable', d.fijos||[], [{key:'desc',label:'Descripción'},{key:'importe',label:'Importe'}]);
   renderTable('extrasTable', d.extras||[], [{key:'desc',label:'Descripción'},{key:'importe',label:'Importe'}]);
 }
 
@@ -718,12 +762,12 @@ function renderCharts() {
   const donutEl = document.getElementById('expenseDonut');
   if(donutEl) {
     const t = getMonthTotals(state.currentMonth);
-    const vals = [t.totalDebitos,t.totalTarjetas,t.totalServicios,t.totalExtras];
+    const vals = [t.totalDebitos,t.totalTarjetas,t.totalServicios,t.totalFijos,t.totalExtras];
     const hasData = vals.some(v=>v>0);
     charts.donut = new Chart(donutEl.getContext('2d'), {
       type:'doughnut',
-      data:{ labels:['Débitos','Tarjetas','Servicios','Extras'],
-        datasets:[{ data:hasData?vals:[1], backgroundColor:hasData?['#fbbf24','#f472b6','#60a5fa','#a78bfa']:['#1e293b'], borderWidth:0, borderRadius:4, spacing:3 }]
+      data:{ labels:['Débitos','Tarjetas','Servicios','Gastos Fijos','Extras'],
+        datasets:[{ data:hasData?vals:[1], backgroundColor:hasData?['#fbbf24','#f472b6','#60a5fa','#34d399','#a78bfa']:['#1e293b'], borderWidth:0, borderRadius:4, spacing:3 }]
       },
       options:{ responsive:true, maintainAspectRatio:false, cutout:'65%',
         plugins:{
@@ -776,6 +820,72 @@ function renderCharts() {
   }
 }
 
+// ========== HISTORY CHART ==========
+const HISTORY_COLORS = ['#22d3ee','#f87171','#34d399','#fbbf24','#a78bfa','#f472b6','#60a5fa','#fb923c','#4ade80','#e879f9'];
+
+function getAllUniqueItems() {
+  const items = new Set();
+  Object.values(state.months).forEach(d => {
+    (d.debitos||[]).forEach(i=>items.add(i.desc));
+    (d.tarjetas||[]).forEach(i=>items.add(i.desc));
+    (d.servicios||[]).forEach(i=>items.add(i.desc));
+    (d.fijos||[]).forEach(i=>items.add(i.desc));
+    // extras excluidos del histórico (son extraordinarios)
+  });
+  return [...items].filter(Boolean).sort();
+}
+
+function buildHistoryFilters() {
+  const el = document.getElementById('historyFilters'); if(!el) return;
+  const items = getAllUniqueItems();
+  if(!selectedHistoryItems.length && items.length) selectedHistoryItems = items.slice(0, Math.min(4, items.length));
+  el.innerHTML = items.map(n =>
+    `<button class="filter-chip ${selectedHistoryItems.includes(n)?'active':''}" onclick="toggleHistoryItem('${n.replace(/'/g,"\\'")}')">${n}</button>`
+  ).join('');
+  renderHistoryChart();
+}
+
+function toggleHistoryItem(name) {
+  const idx = selectedHistoryItems.indexOf(name);
+  if(idx>=0) selectedHistoryItems.splice(idx,1);
+  else if(selectedHistoryItems.length<8) selectedHistoryItems.push(name);
+  buildHistoryFilters();
+}
+
+function renderHistoryChart() {
+  if(historyChartInstance) historyChartInstance.destroy();
+  const el = document.getElementById('historyChart'); if(!el) return;
+  const keys = sortedMonthKeys(), tc = getThemeColors();
+
+  const datasets = selectedHistoryItems.map((name,i) => {
+    const data = keys.map(mKey => {
+      const d = state.months[mKey]; let total = 0;
+      [...(d.debitos||[]),...(d.tarjetas||[]),...(d.servicios||[]),...(d.fijos||[])].forEach(item => {
+        if(item.desc === name) total += item.importe;
+      });
+      return total;
+    });
+    return { label:name, data, borderColor:HISTORY_COLORS[i%HISTORY_COLORS.length], fill:false, tension:0.3, borderWidth:2.5, pointRadius:4, pointHoverRadius:7 };
+  });
+
+  historyChartInstance = new Chart(el.getContext('2d'), {
+    type:'line',
+    data:{ labels:keys.map(k=>MONTH_SHORT[MONTH_ORDER.indexOf(k)]), datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'bottom',labels:{color:tc.tx,font:{family:'DM Sans',size:11},padding:12,usePointStyle:true,pointStyleWidth:8}},
+        tooltip:{mode:'index',intersect:false,callbacks:{label:ctx=>ctx.dataset.label+': '+fmt(ctx.parsed.y)},backgroundColor:'rgba(0,0,0,0.8)',titleColor:'#fff',bodyColor:'#fff',padding:10,cornerRadius:8}
+      },
+      scales:{
+        x:{grid:{display:false},ticks:{color:tc.tx,font:{family:'DM Sans'}}},
+        y:{grid:{color:tc.bd+'66'},ticks:{color:tc.tx,callback:v=>fmtShort(v),font:{family:'Space Mono',size:10}}}
+      },
+      interaction:{mode:'nearest',axis:'x',intersect:false}
+    }
+  });
+}
+
 // ========== ACTIONS ==========
 function switchMonth(m) { state.currentMonth=m; renderTabs(); renderMain(); }
 
@@ -804,7 +914,7 @@ function toggleStatus(containerId, idx) {
 
 function deleteItem(containerId, idx) {
   const d = state.months[state.currentMonth];
-  const map = {debitosTable:'debitos',tarjetasTable:'tarjetas',serviciosTable:'servicios',extrasTable:'extras'};
+  const map = {debitosTable:'debitos',tarjetasTable:'tarjetas',serviciosTable:'servicios',fijosTable:'fijos',extrasTable:'extras'};
   const key = map[containerId];
   if(key && d[key]) { d[key].splice(idx,1); saveToFirebase(); renderTables(); renderSummary(); renderBadges(); renderSubtotals(); renderCharts(); }
 }
@@ -855,6 +965,7 @@ function addMonth() {
       debitos:(src.debitos||[]).map(i=>({...i,importe:0,status:'pending'})),
       tarjetas:(src.tarjetas||[]).map(i=>({...i,importe:0,status:'pending'})),
       servicios:(src.servicios||[]).map(i=>({...i,importe:0,status:'pending'})),
+      fijos:(src.fijos||[]).map(i=>({...i,importe:0})),
       extras:(src.extras||[]).map(i=>({...i,importe:0})),
     };
   } else {
@@ -872,7 +983,7 @@ function openItemModal(category, editIdx=null) {
   const isEdit = editIdx!==null;
   const items = d[category]||[];
   const item = isEdit?items[editIdx]:null;
-  const titles = {debitos:'Débito Automático',tarjetas:'Tarjeta',servicios:'Servicio',extras:'Gasto Extra'};
+  const titles = {debitos:'Débito Automático',tarjetas:'Tarjeta',servicios:'Servicio',fijos:'Gasto Fijo',extras:'Gasto Extra'};
   let fields = '';
 
   if(category==='debitos') {
@@ -907,7 +1018,7 @@ function openItemModal(category, editIdx=null) {
 }
 
 function openEditModal(containerId, idx) {
-  const map = {debitosTable:'debitos',tarjetasTable:'tarjetas',serviciosTable:'servicios',extrasTable:'extras'};
+  const map = {debitosTable:'debitos',tarjetasTable:'tarjetas',serviciosTable:'servicios',fijosTable:'fijos',extrasTable:'extras'};
   openItemModal(map[containerId], idx);
 }
 
@@ -932,6 +1043,7 @@ function saveItem(category, editIdx) {
   saveToFirebase();
   closeModal();
   renderTables(); renderSummary(); renderBadges(); renderSubtotals(); renderCharts();
+  if(sortedMonthKeys().length > 1) buildHistoryFilters();
 }
 </script>
 </body>
