@@ -730,6 +730,10 @@ function renderTable(containerId, items, columns) {
       else if(c.key==='status') {
         const lbl = item.status==='paid'?'Saldado':'Pendiente';
         html+=`<td><button class="status ${item.status}" onclick="toggleStatus('${containerId}',${idx})">${lbl}</button></td>`;
+      } else if(c.key==='fecha') {
+        const f = item.fecha;
+        const fmtF = f ? f.split('-').reverse().slice(0,2).join('/') : '-';
+        html+=`<td>${fmtF}</td>`;
       } else html+=`<td>${item[c.key]||'-'}</td>`;
     });
     html+=`<td style="white-space:nowrap">
@@ -747,8 +751,8 @@ function renderTables() {
   renderTable('debitosTable', d.debitos||[], [{key:'desc',label:'Descripción'},{key:'cuota',label:'Cuota'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]);
   renderTable('tarjetasTable', d.tarjetas||[], [{key:'desc',label:'Tarjeta'},{key:'cuota',label:'Cuotas'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]);
   renderTable('serviciosTable', d.servicios||[], [{key:'desc',label:'Servicio'},{key:'periodo',label:'Período'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]);
-  renderTable('fijosTable', d.fijos||[], [{key:'desc',label:'Descripción'},{key:'importe',label:'Importe'}]);
-  renderTable('extrasTable', d.extras||[], [{key:'desc',label:'Descripción'},{key:'importe',label:'Importe'}]);
+  renderTable('fijosTable', d.fijos||[], [{key:'desc',label:'Descripción'},{key:'fecha',label:'Fecha'},{key:'importe',label:'Importe'}]);
+  renderTable('extrasTable', d.extras||[], [{key:'desc',label:'Descripción'},{key:'fecha',label:'Fecha'},{key:'importe',label:'Importe'}]);
 }
 
 // ========== CHARTS ==========
@@ -1003,6 +1007,7 @@ function openItemModal(category, editIdx=null) {
       <div class="form-group"><label>Estado</label><select id="f_status"><option value="pending" ${item?.status!=='paid'?'selected':''}>Pendiente</option><option value="paid" ${item?.status==='paid'?'selected':''}>Saldado</option></select></div>`;
   } else {
     fields=`<div class="form-group"><label>Descripción</label><input id="f_desc" value="${item?.desc||''}"></div>
+      <div class="form-group"><label>Fecha</label><input id="f_fecha" type="date" value="${item?.fecha||''}"></div>
       <div class="form-group"><label>Importe</label><input id="f_importe" type="number" value="${item?.importe||''}"></div>`;
   }
 
@@ -1033,7 +1038,7 @@ function saveItem(category, editIdx) {
   } else if(category==='servicios') {
     item = {desc,importe,periodo:document.getElementById('f_periodo')?.value||'',status:document.getElementById('f_status')?.value||'pending'};
   } else {
-    item = {desc,importe};
+    item = {desc,importe,fecha:document.getElementById('f_fecha')?.value||''};
   }
 
   if(!d[category]) d[category]=[];
