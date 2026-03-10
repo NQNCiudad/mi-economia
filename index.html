@@ -302,7 +302,7 @@ let historyChartInstance = null;
 let selectedHistoryItems = [];
 
 function emptyMonth() {
-  return { ingresos:{sueldo:0,resto:0,extra:0}, debitos:[], tarjetas:[], servicios:[], fijos:[], extras:[] };
+  return { ingresos:[], debitos:[], tarjetas:[], servicios:[], fijos:[], extras:[] };
 }
 
 // ========== FIREBASE SYNC ==========
@@ -330,7 +330,14 @@ dataRef.on('value', (snapshot) => {
     Object.keys(state.months).forEach(m => {
       const d = state.months[m];
       if(!d.debitos)d.debitos=[]; if(!d.tarjetas)d.tarjetas=[]; if(!d.servicios)d.servicios=[]; if(!d.fijos)d.fijos=[]; if(!d.extras)d.extras=[];
-      if(!d.ingresos) d.ingresos = {sueldo:0,resto:0,extra:0};
+      // Migrar ingresos viejos (objeto) a nuevo formato (array)
+      if(!Array.isArray(d.ingresos)) {
+        const old = d.ingresos || {};
+        d.ingresos = [];
+        if(old.sueldo) d.ingresos.push({desc:'Sueldo',importe:old.sueldo,fecha:''});
+        if(old.resto) d.ingresos.push({desc:'Resto Mes Anterior',importe:old.resto,fecha:''});
+        if(old.extra) d.ingresos.push({desc:'Extra',importe:old.extra,fecha:''});
+      }
     });
   }
   if(!isLoaded) {
@@ -376,7 +383,7 @@ const fmtShort = (n) => {
 function getMonthTotals(mKey) {
   const d = state.months[mKey];
   if(!d) return {totalIngresos:0,totalDebitos:0,totalTarjetas:0,totalServicios:0,totalExtras:0,totalGastos:0,balance:0};
-  const totalIngresos = (d.ingresos.sueldo||0)+(d.ingresos.resto||0)+(d.ingresos.extra||0);
+  const totalIngresos = (d.ingresos||[]).reduce((s,i)=>s+i.importe,0);
   const totalDebitos = (d.debitos||[]).reduce((s,i)=>s+i.importe,0);
   const totalTarjetas = (d.tarjetas||[]).reduce((s,i)=>s+i.importe,0);
   const totalServicios = (d.servicios||[]).reduce((s,i)=>s+i.importe,0);
@@ -453,26 +460,8 @@ function renderMain() {
           <div class="card-title"><span class="dot" style="background:var(--green)"></span>Ingresos — ${state.currentMonth}</div>
           <span class="subtotal-badge" id="badgeIngresos" style="background:rgba(52,211,153,0.1);color:var(--green);border-color:rgba(52,211,153,0.15)"></span>
         </div>
-        <div class="income-grid">
-          <div class="income-item">
-            <label>Sueldo</label>
-            <input class="income-input" type="number" value="${d.ingresos.sueldo||''}" placeholder="0"
-              onfocus="isEditing=true" onblur="setTimeout(()=>{isEditing=false},600)"
-              oninput="updateIncome('sueldo',this.value)">
-          </div>
-          <div class="income-item">
-            <label>Resto Mes Anterior</label>
-            <input class="income-input" type="number" value="${d.ingresos.resto||''}" placeholder="0"
-              onfocus="isEditing=true" onblur="setTimeout(()=>{isEditing=false},600)"
-              oninput="updateIncome('resto',this.value)">
-          </div>
-          <div class="income-item">
-            <label>Extra</label>
-            <input class="income-input" type="number" value="${d.ingresos.extra||''}" placeholder="0"
-              onfocus="isEditing=true" onblur="setTimeout(()=>{isEditing=false},600)"
-              oninput="updateIncome('extra',this.value)">
-          </div>
-        </div>
+        <div class="table-wrap"><div id="ingresosTable"></div></div>
+        <button class="add-row-btn" onclick="openItemModal('ingresos')">+ Agregar ingreso</button>
       </div>
 
       <div class="card animate-in delay-3">
@@ -606,7 +595,7 @@ function renderSubtotals() {
       <tbody>
         <tr>
           <td style="color:var(--green)">Ingresos</td>
-          <td>Sueldo ${fmt(d.ingresos.sueldo||0)} + Resto ${fmt(d.ingresos.resto||0)} + Extra ${fmt(d.ingresos.extra||0)}</td>
+          <td>${(d.ingresos||[]).length} items</td>
           <td class="amount" style="color:var(--green)">${fmt(t.totalIngresos)}</td>
           <td class="amount">—</td>
           <td class="amount">—</td>
@@ -726,7 +715,10 @@ function renderTable(containerId, items, columns) {
   items.forEach((item,idx) => {
     html += '<tr>';
     columns.forEach(c => {
-      if(c.key==='importe') html+=`<td class="amount">${fmt(item.importe)}</td>`;
+      if(c.key==='importe') {
+        const isIncome = containerId==='ingresosTable';
+        html+=`<td class="amount" ${isIncome?'style="color:var(--green)"':''}>${fmt(item.importe)}</td>`;
+      }
       else if(c.key==='status') {
         const lbl = item.status==='paid'?'Saldado':'Pendiente';
         html+=`<td><button class="status ${item.status}" onclick="toggleStatus('${containerId}',${idx})">${lbl}</button></td>`;
@@ -748,6 +740,7 @@ function renderTable(containerId, items, columns) {
 function renderTables() {
   const d = state.months[state.currentMonth];
   if(!d) return;
+  renderTable('ingresosTable', d.ingresos||[], [{key:'desc',label:'Descripción'},{key:'fecha',label:'Fecha'},{key:'importe',label:'Importe'}]);
   renderTable('debitosTable', d.debitos||[], [{key:'desc',label:'Descripción'},{key:'cuota',label:'Cuota'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]);
   renderTable('tarjetasTable', d.tarjetas||[], [{key:'desc',label:'Tarjeta'},{key:'cuota',label:'Cuotas'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]);
   renderTable('serviciosTable', d.servicios||[], [{key:'desc',label:'Servicio'},{key:'periodo',label:'Período'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]);
@@ -893,15 +886,6 @@ function renderHistoryChart() {
 // ========== ACTIONS ==========
 function switchMonth(m) { state.currentMonth=m; renderTabs(); renderMain(); }
 
-function updateIncome(field, val) {
-  state.months[state.currentMonth].ingresos[field] = parseFloat(val)||0;
-  saveToFirebase();
-  renderSummary();
-  renderBadges();
-  renderSubtotals();
-  renderCharts();
-}
-
 function toggleStatus(containerId, idx) {
   const d = state.months[state.currentMonth];
   const map = {debitosTable:'debitos',tarjetasTable:'tarjetas',serviciosTable:'servicios'};
@@ -918,7 +902,7 @@ function toggleStatus(containerId, idx) {
 
 function deleteItem(containerId, idx) {
   const d = state.months[state.currentMonth];
-  const map = {debitosTable:'debitos',tarjetasTable:'tarjetas',serviciosTable:'servicios',fijosTable:'fijos',extrasTable:'extras'};
+  const map = {ingresosTable:'ingresos',debitosTable:'debitos',tarjetasTable:'tarjetas',serviciosTable:'servicios',fijosTable:'fijos',extrasTable:'extras'};
   const key = map[containerId];
   if(key && d[key]) { d[key].splice(idx,1); saveToFirebase(); renderTables(); renderSummary(); renderBadges(); renderSubtotals(); renderCharts(); }
 }
@@ -965,7 +949,7 @@ function addMonth() {
   if(copyKey && state.months[copyKey]) {
     const src = state.months[copyKey];
     state.months[month] = {
-      ingresos:{sueldo:0,resto:0,extra:0},
+      ingresos:(src.ingresos||[]).map(i=>({...i,importe:0,fecha:''})),
       debitos:(src.debitos||[]).map(i=>({...i,importe:0,status:'pending'})),
       tarjetas:(src.tarjetas||[]).map(i=>({...i,importe:0,status:'pending'})),
       servicios:(src.servicios||[]).map(i=>({...i,importe:0,status:'pending'})),
@@ -987,7 +971,7 @@ function openItemModal(category, editIdx=null) {
   const isEdit = editIdx!==null;
   const items = d[category]||[];
   const item = isEdit?items[editIdx]:null;
-  const titles = {debitos:'Débito Automático',tarjetas:'Tarjeta',servicios:'Servicio',fijos:'Gasto Fijo',extras:'Gasto Extra'};
+  const titles = {ingresos:'Ingreso',debitos:'Débito Automático',tarjetas:'Tarjeta',servicios:'Servicio',fijos:'Gasto Fijo',extras:'Gasto Extra'};
   let fields = '';
 
   if(category==='debitos') {
@@ -1023,7 +1007,7 @@ function openItemModal(category, editIdx=null) {
 }
 
 function openEditModal(containerId, idx) {
-  const map = {debitosTable:'debitos',tarjetasTable:'tarjetas',serviciosTable:'servicios',fijosTable:'fijos',extrasTable:'extras'};
+  const map = {ingresosTable:'ingresos',debitosTable:'debitos',tarjetasTable:'tarjetas',serviciosTable:'servicios',fijosTable:'fijos',extrasTable:'extras'};
   openItemModal(map[containerId], idx);
 }
 
