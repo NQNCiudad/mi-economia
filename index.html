@@ -6,6 +6,9 @@
 <title>Mi Economía 2026</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <style>
@@ -220,6 +223,22 @@ h1 span { font-weight:400; font-size:16px; -webkit-text-fill-color:var(--text-di
 .modal-overlay { background:var(--modal-bg); }
 [data-theme="dark"] .btn-primary { color:#0a0e17; }
 @media(max-width:480px) { .summary-value{font-size:18px;} .summary-row{gap:8px;} }
+
+/* SUBE stepper */
+.sube-row { display:flex; align-items:center; gap:8px; }
+.sube-detail { font-size:11px; color:var(--text-dim); }
+.stepper { display:inline-flex; align-items:center; gap:0; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.stepper button {
+  width:28px; height:28px; border:none; background:var(--surface2); color:var(--text);
+  font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  transition:background 0.15s; padding:0; font-family:'Space Mono',monospace;
+}
+.stepper button:hover { background:var(--accent); color:var(--bg); }
+.stepper .stepper-val {
+  width:36px; text-align:center; font-family:'Space Mono',monospace; font-size:13px;
+  font-weight:700; color:var(--accent); background:var(--surface); border-left:1px solid var(--border);
+  border-right:1px solid var(--border); height:28px; line-height:28px;
+}
 
 @keyframes fadeIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
 .animate-in { animation:fadeIn 0.4s ease forwards; opacity:0; }
@@ -498,13 +517,21 @@ function renderMain() {
         <div class="card-header"><div class="card-title"><span class="dot" style="background:var(--accent)"></span>Resumen — ${state.currentMonth}</div></div>
         <div class="table-wrap"><div id="subtotalsPanel"></div></div>
       </div>
+
+      ${keys.length > 1 ? `
+      <div class="card full-width animate-in delay-4">
+        <div class="card-header"><div class="card-title"><span class="dot" style="background:var(--accent2)"></span>Resumen Anual 2026</div></div>
+        <div class="table-wrap"><div id="annualPanel"></div></div>
+      </div>` : ''}
     </div>
     <div class="export-bar">
+      <button class="btn btn-secondary btn-sm" onclick="exportExcel()" title="Exportar mes a Excel">📊 Excel</button>
+      <button class="btn btn-secondary btn-sm" onclick="exportPDF()" title="Exportar mes a PDF">📄 PDF</button>
       <button class="btn btn-danger btn-sm" onclick="deleteMonth()">Eliminar ${state.currentMonth}</button>
     </div>`;
 
   renderSummary(); renderTables(); renderBadges(); renderSubtotals(); renderCharts();
-  if(keys.length > 1) buildHistoryFilters();
+  if(keys.length > 1) { buildHistoryFilters(); renderAnnual(); }
 }
 
 function renderBadges() {
@@ -717,7 +744,21 @@ function renderTable(containerId, items, columns) {
     columns.forEach(c => {
       if(c.key==='importe') {
         const isIncome = containerId==='ingresosTable';
-        html+=`<td class="amount" ${isIncome?'style="color:var(--green)"':''}>${fmt(item.importe)}</td>`;
+        if(item.tipo==='sube') {
+          html+=`<td class="amount">
+            <div class="sube-row">
+              <div class="stepper">
+                <button onclick="stepSube('${containerId}',${idx},-1)">−</button>
+                <span class="stepper-val">${item.cantidad||0}</span>
+                <button onclick="stepSube('${containerId}',${idx},1)">+</button>
+              </div>
+              <span style="color:var(--text-dim);font-size:12px">× ${fmt(item.valorUnit||0)}</span>
+              <span style="font-family:'Space Mono',monospace;font-weight:700"> = ${fmt(item.importe)}</span>
+            </div>
+          </td>`;
+        } else {
+          html+=`<td class="amount" ${isIncome?'style="color:var(--green)"':''}>${fmt(item.importe)}</td>`;
+        }
       }
       else if(c.key==='status') {
         const lbl = item.status==='paid'?'Saldado':'Pendiente';
@@ -726,6 +767,8 @@ function renderTable(containerId, items, columns) {
         const f = item.fecha;
         const fmtF = f ? f.split('-').reverse().slice(0,2).join('/') : '-';
         html+=`<td>${fmtF}</td>`;
+      } else if(c.key==='desc' && item.tipo==='sube') {
+        html+=`<td>${item.desc||'-'} <span style="font-size:10px;background:rgba(34,211,238,0.12);color:var(--accent);padding:2px 6px;border-radius:10px;margin-left:4px">SUBE</span></td>`;
       } else html+=`<td>${item[c.key]||'-'}</td>`;
     });
     html+=`<td style="white-space:nowrap">
@@ -884,6 +927,18 @@ function renderHistoryChart() {
 }
 
 // ========== ACTIONS ==========
+function stepSube(containerId, idx, delta) {
+  const d = state.months[state.currentMonth];
+  const map = {ingresosTable:'ingresos',debitosTable:'debitos',tarjetasTable:'tarjetas',serviciosTable:'servicios',fijosTable:'fijos',extrasTable:'extras'};
+  const key = map[containerId];
+  if(!key || !d[key] || !d[key][idx]) return;
+  const item = d[key][idx];
+  item.cantidad = Math.max(0, (item.cantidad||0) + delta);
+  item.importe = (item.valorUnit||0) * item.cantidad;
+  saveToFirebase();
+  renderTables(); renderSummary(); renderBadges(); renderSubtotals(); renderCharts();
+}
+
 function switchMonth(m) { state.currentMonth=m; renderTabs(); renderMain(); }
 
 function toggleStatus(containerId, idx) {
@@ -953,8 +1008,16 @@ function addMonth() {
       debitos:(src.debitos||[]).map(i=>({...i,importe:0,status:'pending'})),
       tarjetas:(src.tarjetas||[]).map(i=>({...i,importe:0,status:'pending'})),
       servicios:(src.servicios||[]).map(i=>({...i,importe:0,status:'pending'})),
-      fijos:(src.fijos||[]).map(i=>({...i,importe:0})),
-      extras:(src.extras||[]).map(i=>({...i,importe:0})),
+      fijos:(src.fijos||[]).map(i=>{
+        const base = {...i, importe:0, fecha:''};
+        if(i.tipo==='sube') { base.cantidad = 0; base.valorUnit = i.valorUnit; base.importe = 0; }
+        return base;
+      }),
+      extras:(src.extras||[]).map(i=>{
+        const base = {...i, importe:0, fecha:''};
+        if(i.tipo==='sube') { base.cantidad = 0; base.valorUnit = i.valorUnit; base.importe = 0; }
+        return base;
+      }),
     };
   } else {
     state.months[month] = emptyMonth();
@@ -990,9 +1053,21 @@ function openItemModal(category, editIdx=null) {
       <div class="form-group"><label>Importe</label><input id="f_importe" type="number" value="${item?.importe||''}"></div>
       <div class="form-group"><label>Estado</label><select id="f_status"><option value="pending" ${item?.status!=='paid'?'selected':''}>Pendiente</option><option value="paid" ${item?.status==='paid'?'selected':''}>Saldado</option></select></div>`;
   } else {
+    const isSube = item?.tipo==='sube';
     fields=`<div class="form-group"><label>Descripción</label><input id="f_desc" value="${item?.desc||''}"></div>
       <div class="form-group"><label>Fecha</label><input id="f_fecha" type="date" value="${item?.fecha||''}"></div>
-      <div class="form-group"><label>Importe</label><input id="f_importe" type="number" value="${item?.importe||''}"></div>`;
+      <div class="form-group" style="grid-column:1/-1">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="f_sube" ${isSube?'checked':''} onchange="toggleSubeFields()"> Tipo SUBE (valor × cantidad)
+        </label>
+      </div>
+      <div id="subeFields" style="display:${isSube?'contents':'none'}">
+        <div class="form-group"><label>Valor carga</label><input id="f_valorUnit" type="number" value="${item?.valorUnit||''}" placeholder="ej: 1200" oninput="calcSubeTotal()"></div>
+        <div class="form-group"><label>Cantidad viajes</label><input id="f_cantidad" type="number" min="0" value="${item?.cantidad||''}" placeholder="ej: 20" oninput="calcSubeTotal()"></div>
+      </div>
+      <div class="form-group" id="importeGroup" ${isSube?'style="pointer-events:none;opacity:0.6"':''}>
+        <label>Importe ${isSube?'(auto)':''}</label><input id="f_importe" type="number" value="${item?.importe||''}" ${isSube?'readonly':''}>
+      </div>`;
   }
 
   document.getElementById('modalContent').innerHTML = `
@@ -1022,7 +1097,14 @@ function saveItem(category, editIdx) {
   } else if(category==='servicios') {
     item = {desc,importe,periodo:document.getElementById('f_periodo')?.value||'',status:document.getElementById('f_status')?.value||'pending'};
   } else {
-    item = {desc,importe,fecha:document.getElementById('f_fecha')?.value||''};
+    const isSube = document.getElementById('f_sube')?.checked;
+    if(isSube) {
+      const valorUnit = parseFloat(document.getElementById('f_valorUnit')?.value)||0;
+      const cantidad = parseInt(document.getElementById('f_cantidad')?.value)||0;
+      item = {desc,importe:valorUnit*cantidad,fecha:document.getElementById('f_fecha')?.value||'',tipo:'sube',valorUnit,cantidad};
+    } else {
+      item = {desc,importe,fecha:document.getElementById('f_fecha')?.value||''};
+    }
   }
 
   if(!d[category]) d[category]=[];
@@ -1033,6 +1115,245 @@ function saveItem(category, editIdx) {
   closeModal();
   renderTables(); renderSummary(); renderBadges(); renderSubtotals(); renderCharts();
   if(sortedMonthKeys().length > 1) buildHistoryFilters();
+}
+
+function toggleSubeFields() {
+  const checked = document.getElementById('f_sube').checked;
+  const subeFields = document.getElementById('subeFields');
+  const importeGroup = document.getElementById('importeGroup');
+  const importeInput = document.getElementById('f_importe');
+  subeFields.style.display = checked ? 'contents' : 'none';
+  if(checked) {
+    importeGroup.style.pointerEvents = 'none';
+    importeGroup.style.opacity = '0.6';
+    importeInput.readOnly = true;
+    importeGroup.querySelector('label').textContent = 'Importe (auto)';
+    calcSubeTotal();
+  } else {
+    importeGroup.style.pointerEvents = '';
+    importeGroup.style.opacity = '';
+    importeInput.readOnly = false;
+    importeGroup.querySelector('label').textContent = 'Importe';
+  }
+}
+
+function calcSubeTotal() {
+  const v = parseFloat(document.getElementById('f_valorUnit')?.value)||0;
+  const c = parseInt(document.getElementById('f_cantidad')?.value)||0;
+  const imp = document.getElementById('f_importe');
+  if(imp) imp.value = v * c;
+}
+
+// ========== ANNUAL SUMMARY ==========
+function renderAnnual() {
+  const el = document.getElementById('annualPanel'); if(!el) return;
+  const keys = sortedMonthKeys();
+  if(keys.length < 2) return;
+
+  let html = '<table class="data-table"><thead><tr><th>Concepto</th>';
+  keys.forEach(k => html += `<th style="text-align:right">${MONTH_SHORT[MONTH_ORDER.indexOf(k)]}</th>`);
+  html += '<th style="text-align:right;color:var(--accent)">TOTAL</th></tr></thead><tbody>';
+
+  const rows = [
+    { label:'Ingresos', color:'var(--green)', key:'totalIngresos' },
+    { label:'Débitos', color:'var(--orange)', key:'totalDebitos' },
+    { label:'Tarjetas', color:'var(--pink)', key:'totalTarjetas' },
+    { label:'Servicios', color:'var(--blue)', key:'totalServicios' },
+    { label:'Gastos Fijos', color:'var(--green)', key:'totalFijos' },
+    { label:'Extras', color:'var(--accent2)', key:'totalExtras' },
+    { label:'Total Gastos', color:'var(--red)', key:'totalGastos', bold:true },
+    { label:'Balance', color:null, key:'balance', bold:true },
+  ];
+
+  rows.forEach(row => {
+    const vals = keys.map(k => getMonthTotals(k)[row.key]);
+    const total = vals.reduce((s,v) => s+v, 0);
+    const fw = row.bold ? 'font-weight:700;' : '';
+    const borderTop = row.key==='totalGastos' ? 'border-top:2px solid var(--border);' : '';
+    const color = row.key==='balance' ? null : row.color;
+
+    html += `<tr style="${borderTop}"><td style="${fw}${color?'color:'+color+';':''}">${row.label}</td>`;
+    vals.forEach(v => {
+      let c = color || '';
+      if(row.key==='balance') c = v >= 0 ? 'var(--green)' : 'var(--red)';
+      html += `<td class="amount" style="${fw}${c?'color:'+c+';':''}">${v>=0?'':'-'}${fmt(v)}</td>`;
+    });
+    let tc = color || '';
+    if(row.key==='balance') tc = total >= 0 ? 'var(--green)' : 'var(--red)';
+    html += `<td class="amount" style="${fw}${tc?'color:'+tc+';':''}font-size:${row.bold?'15':'13'}px">${total>=0?'':'-'}${fmt(total)}</td></tr>`;
+  });
+
+  // Avg row
+  html += '<tr style="border-top:1px solid var(--border)"><td style="color:var(--text-dim);font-size:12px">Promedio</td>';
+  const avgBal = keys.map(k=>getMonthTotals(k).balance);
+  const avg = avgBal.reduce((s,v)=>s+v,0) / avgBal.length;
+  keys.forEach(k => html += '<td></td>');
+  html += `<td class="amount" style="color:${avg>=0?'var(--green)':'var(--red)'};font-size:13px">${avg>=0?'':'-'}${fmt(avg)}/mes</td></tr>`;
+
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+// ========== EXPORT EXCEL ==========
+function exportExcel() {
+  const m = state.currentMonth;
+  const d = state.months[m];
+  const t = getMonthTotals(m);
+  const wb = XLSX.utils.book_new();
+
+  // Helper
+  const buildSheet = (title, items, cols) => {
+    const data = [cols.map(c=>c.label)];
+    (items||[]).forEach(i => {
+      data.push(cols.map(c => {
+        if(c.key==='importe') return i.importe||0;
+        if(c.key==='fecha') return i.fecha ? i.fecha.split('-').reverse().slice(0,2).join('/') : '';
+        if(c.key==='status') return i.status==='paid'?'Saldado':'Pendiente';
+        return i[c.key]||'';
+      }));
+    });
+    const total = (items||[]).reduce((s,i)=>s+i.importe,0);
+    data.push([]);
+    data.push(['SUBTOTAL','','',total]);
+    return data;
+  };
+
+  // Resumen sheet
+  const resumen = [
+    ['MI ECONOMÍA 2026 — ' + m],
+    [],
+    ['RESUMEN'],
+    ['Ingresos', t.totalIngresos],
+    ['Débitos', t.totalDebitos],
+    ['Tarjetas', t.totalTarjetas],
+    ['Servicios', t.totalServicios],
+    ['Gastos Fijos', t.totalFijos],
+    ['Extras', t.totalExtras],
+    ['TOTAL GASTOS', t.totalGastos],
+    ['BALANCE', t.balance],
+  ];
+  const wsResumen = XLSX.utils.aoa_to_sheet(resumen);
+  XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+
+  // Ingresos
+  const wsIng = XLSX.utils.aoa_to_sheet(buildSheet('Ingresos', d.ingresos, [{key:'desc',label:'Descripción'},{key:'fecha',label:'Fecha'},{key:'importe',label:'Importe'}]));
+  XLSX.utils.book_append_sheet(wb, wsIng, 'Ingresos');
+
+  // Débitos
+  const wsDeb = XLSX.utils.aoa_to_sheet(buildSheet('Débitos', d.debitos, [{key:'desc',label:'Descripción'},{key:'cuota',label:'Cuota'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]));
+  XLSX.utils.book_append_sheet(wb, wsDeb, 'Débitos');
+
+  // Tarjetas
+  const wsTar = XLSX.utils.aoa_to_sheet(buildSheet('Tarjetas', d.tarjetas, [{key:'desc',label:'Tarjeta'},{key:'cuota',label:'Cuotas'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]));
+  XLSX.utils.book_append_sheet(wb, wsTar, 'Tarjetas');
+
+  // Servicios
+  const wsSer = XLSX.utils.aoa_to_sheet(buildSheet('Servicios', d.servicios, [{key:'desc',label:'Servicio'},{key:'periodo',label:'Período'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]));
+  XLSX.utils.book_append_sheet(wb, wsSer, 'Servicios');
+
+  // Fijos
+  const wsFij = XLSX.utils.aoa_to_sheet(buildSheet('Gastos Fijos', d.fijos, [{key:'desc',label:'Descripción'},{key:'fecha',label:'Fecha'},{key:'importe',label:'Importe'}]));
+  XLSX.utils.book_append_sheet(wb, wsFij, 'Gastos Fijos');
+
+  // Extras
+  const wsExt = XLSX.utils.aoa_to_sheet(buildSheet('Extras', d.extras, [{key:'desc',label:'Descripción'},{key:'fecha',label:'Fecha'},{key:'importe',label:'Importe'}]));
+  XLSX.utils.book_append_sheet(wb, wsExt, 'Extras');
+
+  XLSX.writeFile(wb, `MiEconomia_${m}_2026.xlsx`);
+}
+
+// ========== EXPORT PDF ==========
+function exportPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p','mm','a4');
+  const m = state.currentMonth;
+  const d = state.months[m];
+  const t = getMonthTotals(m);
+
+  // Title
+  doc.setFontSize(18);
+  doc.setTextColor(34,211,238);
+  doc.text('MI ECONOMÍA 2026', 14, 20);
+  doc.setFontSize(12);
+  doc.setTextColor(100);
+  doc.text(m, 14, 28);
+
+  // Summary box
+  let y = 36;
+  doc.setFontSize(10);
+  doc.setTextColor(60);
+
+  const summaryData = [
+    ['Ingresos', fmt(t.totalIngresos)],
+    ['Débitos', fmt(t.totalDebitos)],
+    ['Tarjetas', fmt(t.totalTarjetas)],
+    ['Servicios', fmt(t.totalServicios)],
+    ['Gastos Fijos', fmt(t.totalFijos)],
+    ['Extras', fmt(t.totalExtras)],
+    ['TOTAL GASTOS', fmt(t.totalGastos)],
+    ['BALANCE', (t.balance>=0?'':'-')+fmt(t.balance)],
+  ];
+
+  doc.autoTable({
+    startY: y,
+    head: [['Concepto','Monto']],
+    body: summaryData,
+    theme: 'grid',
+    headStyles: { fillColor:[34,211,238], textColor:[10,14,23], fontStyle:'bold', fontSize:10 },
+    styles: { fontSize:9, cellPadding:3 },
+    columnStyles: { 1:{halign:'right',fontStyle:'bold'} },
+    didParseCell: (data) => {
+      if(data.section==='body' && data.row.index>=6) { data.cell.styles.fontStyle='bold'; }
+      if(data.section==='body' && data.row.index===7) { data.cell.styles.textColor = t.balance>=0?[5,150,105]:[220,38,38]; }
+    }
+  });
+
+  // Category tables
+  const addTable = (title, items, cols) => {
+    if(!items||!items.length) return;
+    const y2 = doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : 120;
+    if(y2 > 250) doc.addPage();
+    const startY = y2 > 250 ? 20 : y2;
+
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(title, 14, startY);
+
+    const head = [cols.map(c=>c.label)];
+    const body = items.map(i => cols.map(c => {
+      if(c.key==='importe') return fmt(i.importe);
+      if(c.key==='fecha') return i.fecha ? i.fecha.split('-').reverse().slice(0,2).join('/') : '-';
+      if(c.key==='status') return i.status==='paid'?'Saldado':'Pendiente';
+      return i[c.key]||'-';
+    }));
+
+    doc.autoTable({
+      startY: startY + 4,
+      head, body,
+      theme: 'striped',
+      headStyles: { fillColor:[30,41,59], textColor:[226,232,240], fontSize:8 },
+      styles: { fontSize:8, cellPadding:2 },
+      columnStyles: cols.reduce((acc,c,i) => { if(c.key==='importe') acc[i]={halign:'right',fontStyle:'bold'}; return acc; }, {}),
+    });
+  };
+
+  addTable('INGRESOS', d.ingresos, [{key:'desc',label:'Descripción'},{key:'fecha',label:'Fecha'},{key:'importe',label:'Importe'}]);
+  addTable('DÉBITOS AUTOMÁTICOS', d.debitos, [{key:'desc',label:'Descripción'},{key:'cuota',label:'Cuota'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]);
+  addTable('TARJETAS', d.tarjetas, [{key:'desc',label:'Tarjeta'},{key:'cuota',label:'Cuotas'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]);
+  addTable('SERVICIOS', d.servicios, [{key:'desc',label:'Servicio'},{key:'periodo',label:'Período'},{key:'importe',label:'Importe'},{key:'status',label:'Estado'}]);
+  addTable('GASTOS FIJOS', d.fijos, [{key:'desc',label:'Descripción'},{key:'fecha',label:'Fecha'},{key:'importe',label:'Importe'}]);
+  addTable('GASTOS EXTRAS', d.extras, [{key:'desc',label:'Descripción'},{key:'fecha',label:'Fecha'},{key:'importe',label:'Importe'}]);
+
+  // Footer
+  const pageCount = doc.internal.getNumberOfPages();
+  for(let i=1;i<=pageCount;i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(`Mi Economía 2026 — ${m} — Página ${i}/${pageCount}`, 14, 290);
+  }
+
+  doc.save(`MiEconomia_${m}_2026.pdf`);
 }
 </script>
 </body>
