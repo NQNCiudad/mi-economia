@@ -319,6 +319,7 @@ let saveTimeout = null;
 let isEditing = false;
 let historyChartInstance = null;
 let selectedHistoryItems = [];
+let annualFilterMonths = []; // empty = all
 
 function emptyMonth() {
   return { ingresos:[], debitos:[], tarjetas:[], servicios:[], fijos:[], extras:[] };
@@ -453,13 +454,7 @@ function renderMain() {
       ${keys.length > 1 ? `
       <div class="card full-width animate-in delay-1">
         <div class="card-header"><div class="card-title"><span class="dot" style="background:var(--accent)"></span>Evolución Mensual</div></div>
-        <div class="chart-container"><canvas id="overviewChart"></canvas></div>
-      </div>` : ''}
-
-      ${keys.length > 1 ? `
-      <div class="card animate-in delay-2">
-        <div class="card-title"><span class="dot" style="background:var(--green)"></span>Balance Acumulado</div>
-        <div class="chart-container-sm"><canvas id="balanceChart"></canvas></div>
+        <div class="chart-container"><canvas id="evolutionChart"></canvas></div>
       </div>` : ''}
 
       <div class="card animate-in delay-2">
@@ -521,6 +516,7 @@ function renderMain() {
       ${keys.length > 1 ? `
       <div class="card full-width animate-in delay-4">
         <div class="card-header"><div class="card-title"><span class="dot" style="background:var(--accent2)"></span>Resumen Anual 2026</div></div>
+        <div class="history-filters" id="annualFilters"></div>
         <div class="table-wrap"><div id="annualPanel"></div></div>
       </div>` : ''}
     </div>
@@ -821,40 +817,37 @@ function renderCharts() {
 
   if(keys.length<=1) return;
 
-  const overEl = document.getElementById('overviewChart');
-  if(overEl) {
+  const evoEl = document.getElementById('evolutionChart');
+  if(evoEl) {
     const totals = keys.map(k=>getMonthTotals(k));
-    charts.overview = new Chart(overEl.getContext('2d'), {
-      type:'bar',
+    let cum = 0;
+    const balAcum = totals.map(t => { cum += t.balance; return cum; });
+    const tc = getThemeColors();
+
+    charts.evolution = new Chart(evoEl.getContext('2d'), {
+      type:'line',
       data:{ labels:keys.map(k=>MONTH_SHORT[MONTH_ORDER.indexOf(k)]),
         datasets:[
-          {label:'Ingresos',data:totals.map(t=>t.totalIngresos),backgroundColor:'rgba(52,211,153,0.7)',borderRadius:6,borderSkipped:false},
-          {label:'Gastos',data:totals.map(t=>t.totalGastos),backgroundColor:'rgba(248,113,113,0.7)',borderRadius:6,borderSkipped:false}
+          { label:'Ingresos', data:totals.map(t=>t.totalIngresos), borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.08)',
+            fill:false, tension:0.35, borderWidth:2.5, pointRadius:5, pointHoverRadius:8, pointBackgroundColor:'#34d399' },
+          { label:'Gastos', data:totals.map(t=>t.totalGastos), borderColor:'#f87171', backgroundColor:'rgba(248,113,113,0.08)',
+            fill:false, tension:0.35, borderWidth:2.5, pointRadius:5, pointHoverRadius:8, pointBackgroundColor:'#f87171' },
+          { label:'Balance Acumulado', data:balAcum, borderColor:'#22d3ee',
+            backgroundColor:(ctx)=>{const g=ctx.chart.ctx.createLinearGradient(0,0,0,280);g.addColorStop(0,'rgba(34,211,238,0.15)');g.addColorStop(1,'rgba(34,211,238,0)');return g;},
+            fill:true, tension:0.35, borderWidth:3, pointRadius:5, pointHoverRadius:8, pointBackgroundColor:'#22d3ee', borderDash:[] }
         ]
       },
       options:{ responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{labels:{color:'#64748b',font:{family:'DM Sans'}}},
-          tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+fmt(ctx.parsed.y)},backgroundColor:'#1a2236',titleColor:'#e2e8f0',bodyColor:'#e2e8f0',borderColor:'#1e293b',borderWidth:1,padding:12,cornerRadius:8}
+        plugins:{
+          legend:{position:'top',labels:{color:tc.tx,font:{family:'DM Sans',size:12},padding:16,usePointStyle:true,pointStyleWidth:10}},
+          tooltip:{mode:'index',intersect:false,callbacks:{label:ctx=>ctx.dataset.label+': '+fmt(ctx.parsed.y)},
+            backgroundColor:'rgba(0,0,0,0.85)',titleColor:'#fff',bodyColor:'#fff',padding:12,cornerRadius:8}
         },
-        scales:{ x:{grid:{display:false},ticks:{color:'#64748b',font:{family:'DM Sans'}}}, y:{grid:{color:'rgba(30,41,59,0.5)'},ticks:{color:'#64748b',callback:v=>fmtShort(v),font:{family:'Space Mono',size:11}}} }
-      }
-    });
-  }
-
-  const balEl = document.getElementById('balanceChart');
-  if(balEl) {
-    let cum=0;
-    const balances = keys.map(k=>{cum+=getMonthTotals(k).balance;return cum;});
-    charts.balance = new Chart(balEl.getContext('2d'), {
-      type:'line',
-      data:{ labels:keys.map(k=>MONTH_SHORT[MONTH_ORDER.indexOf(k)]),
-        datasets:[{ label:'Balance Acumulado', data:balances, borderColor:'#22d3ee',
-          backgroundColor:(ctx)=>{const g=ctx.chart.ctx.createLinearGradient(0,0,0,220);g.addColorStop(0,'rgba(34,211,238,0.2)');g.addColorStop(1,'rgba(34,211,238,0)');return g;},
-          fill:true, tension:0.4, pointBackgroundColor:'#22d3ee', pointRadius:5, pointHoverRadius:8, borderWidth:3 }]
-      },
-      options:{ responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>'Acumulado: '+fmt(ctx.parsed.y)},backgroundColor:'#1a2236',titleColor:'#e2e8f0',bodyColor:'#e2e8f0',borderColor:'#1e293b',borderWidth:1,padding:12,cornerRadius:8} },
-        scales:{ x:{grid:{display:false},ticks:{color:'#64748b',font:{family:'DM Sans'}}}, y:{grid:{color:'rgba(30,41,59,0.5)'},ticks:{color:'#64748b',callback:v=>fmtShort(v),font:{family:'Space Mono',size:11}}} }
+        scales:{
+          x:{grid:{display:false},ticks:{color:tc.tx,font:{family:'DM Sans'}}},
+          y:{grid:{color:tc.bd+'44'},ticks:{color:tc.tx,callback:v=>fmtShort(v),font:{family:'Space Mono',size:11}}}
+        },
+        interaction:{mode:'nearest',axis:'x',intersect:false}
       }
     });
   }
@@ -1147,8 +1140,23 @@ function calcSubeTotal() {
 // ========== ANNUAL SUMMARY ==========
 function renderAnnual() {
   const el = document.getElementById('annualPanel'); if(!el) return;
-  const keys = sortedMonthKeys();
-  if(keys.length < 2) return;
+  const allKeys = sortedMonthKeys();
+  if(allKeys.length < 2) return;
+
+  // Build filter chips
+  const filtersEl = document.getElementById('annualFilters');
+  if(filtersEl) {
+    const allActive = annualFilterMonths.length === 0;
+    let chips = `<button class="filter-chip ${allActive?'active':''}" onclick="toggleAnnualFilter('ALL')">Todo</button>`;
+    allKeys.forEach(k => {
+      const active = allActive || annualFilterMonths.includes(k);
+      chips += `<button class="filter-chip ${active&&!allActive?'active':''}" onclick="toggleAnnualFilter('${k}')">${MONTH_SHORT[MONTH_ORDER.indexOf(k)]}</button>`;
+    });
+    filtersEl.innerHTML = chips;
+  }
+
+  // Filter keys
+  const keys = annualFilterMonths.length === 0 ? allKeys : allKeys.filter(k => annualFilterMonths.includes(k));
 
   let html = '<table class="data-table"><thead><tr><th>Concepto</th>';
   keys.forEach(k => html += `<th style="text-align:right">${MONTH_SHORT[MONTH_ORDER.indexOf(k)]}</th>`);
@@ -1192,6 +1200,22 @@ function renderAnnual() {
 
   html += '</tbody></table>';
   el.innerHTML = html;
+}
+
+function toggleAnnualFilter(month) {
+  if(month === 'ALL') {
+    annualFilterMonths = [];
+  } else {
+    const idx = annualFilterMonths.indexOf(month);
+    if(idx >= 0) {
+      annualFilterMonths.splice(idx, 1);
+    } else {
+      annualFilterMonths.push(month);
+    }
+    // If all months selected, reset to "all"
+    if(annualFilterMonths.length === sortedMonthKeys().length) annualFilterMonths = [];
+  }
+  renderAnnual();
 }
 
 // ========== EXPORT EXCEL ==========
